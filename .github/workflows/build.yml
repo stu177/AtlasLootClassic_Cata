@@ -5,29 +5,49 @@ on:
     tags:
       - '**'
 
+env:
+  CATACLYSM_VERSION: 40400
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone project
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
 
-      - name: Install and run Luacheck
-        uses: nebularg/actions-luacheck@v1
-        with:
-          args: "--no-color -q"
-          annotate: warning
+    - name: Get name of addon
+      id: init
+      run: |
+        addon_name=$(ls *.toc)
+        addon_name=$(basename $addon_name .toc)
+        tag_name=${addon_name}-${{github.event.inputs.version}}
+        echo "::set-output name=addon_name::${addon_name}"
+        echo "::set-output name=tag_name::${tag_name}"
+
+    - name: Make folder for zips
+      run: |
+        mkdir -p .releases/${{steps.init.outputs.addon_name}}
+        rsync -r --exclude '.*' . .releases/${{steps.init.outputs.addon_name}}
+
+    # - name: Create mainline zip
+    #   run: |
+    #     cd .releases
+    #     zip -9 -r ${{steps.init.outputs.tag_name}}.zip ${{steps.init.outputs.addon_name}}
+    #     cd ..
+
+
+    - name: Create Cataclysm zip
+      run: |
+        cd .releases
+        zip -9 -r ${{steps.init.outputs.tag_name}}-Cataclysm.zip ${{steps.init.outputs.addon_name}}
+        cd ..
           
-      #- name: Update Curseforge Translations
-      #  run: ./cf_localizations.sh
-      #  env:
-      #    CF_API_KEY: ${{ secrets.CF_API_KEY }}
-
-      - name: Package and release
-        uses: BigWigsMods/packager@v2
-        env:
-          #CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
-          #WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
-          #WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+    - name: Add Cataclysm zip to release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: .releases/${{steps.init.outputs.tag_name}}-Cataclysm.zip
+        asset_name: ${{steps.init.outputs.tag_name}}-Cataclysm.zip
+        asset_content_type: application/zip
